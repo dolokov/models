@@ -32,6 +32,7 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
+import numpy as np 
 
 _BATCH_NORM_DECAY = 0.997
 _BATCH_NORM_EPSILON = 1e-5
@@ -190,6 +191,53 @@ def _building_block_v2(inputs, filters, training, projection_shortcut, strides,
 
   return inputs + shortcut
 
+def _building_block_v2_hflip(inputs, filters, training, projection_shortcut, strides,
+                       data_format):
+    import da 
+    shortcut = inputs
+    inputs = batch_norm(inputs, training, data_format)
+    inputs = tf.nn.relu(inputs)
+
+    # The projection shortcut should come after the first batch norm and ReLU
+    # since it performs a 1x1 convolution.
+    if projection_shortcut is not None:
+      shortcut = projection_shortcut(inputs)
+
+    ## <horizontal flipped>
+    flipped_inputs = tf.identity(inputs)
+    # flip one
+    flipped_inputs = da.hflip(flipped_inputs)
+
+    random_scope_name = 'da%i'%np.random.randint(0,100)
+    with tf.variable_scope(random_scope_name):
+      flipped_inputs = conv2d_fixed_padding(
+          inputs=flipped_inputs, filters=filters, kernel_size=3, strides=strides,
+          data_format=data_format)
+
+      flipped_inputs = batch_norm(flipped_inputs, training, data_format)
+      flipped_inputs = tf.nn.relu(flipped_inputs)
+      flipped_inputs = conv2d_fixed_padding(
+          inputs=flipped_inputs, filters=filters, kernel_size=3, strides=1,
+          data_format=data_format)
+    # flip two
+    flipped_inputs = da.hflip(flipped_inputs)
+    ## </horizontal flipped>
+
+    ## <original>
+    with tf.variable_scope(random_scope_name,reuse=True):
+      inputs = conv2d_fixed_padding(
+          inputs=inputs, filters=filters, kernel_size=3, strides=strides,
+          data_format=data_format)
+
+      inputs = batch_norm(inputs, training, data_format)
+      inputs = tf.nn.relu(inputs)
+      inputs = conv2d_fixed_padding(
+          inputs=inputs, filters=filters, kernel_size=3, strides=1,
+          data_format=data_format)
+    ## </original>
+
+    return shortcut + inputs +  + flipped_inputs
+
 
 def _bottleneck_block_v1(inputs, filters, training, projection_shortcut,
                          strides, data_format):
@@ -306,6 +354,7 @@ def _bottleneck_block_v2(inputs, filters, training, projection_shortcut,
   return inputs + shortcut
 
 
+
 def block_layer(inputs, filters, bottleneck, block_fn, blocks, strides,
                 training, name, data_format):
   """Creates one layer of blocks for the ResNet model.
@@ -407,8 +456,10 @@ class Model(object):
     else:
       if resnet_version == 1:
         self.block_fn = _building_block_v1
-      else:
+      if resnet_version == 2:
         self.block_fn = _building_block_v2
+      if resnet_version == 3:
+        self.block_fn = _building_block_v2_hflip
 
     if dtype not in ALLOWED_TYPES:
       raise ValueError('dtype must be one of: {}'.format(ALLOWED_TYPES))
