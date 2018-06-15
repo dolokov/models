@@ -445,9 +445,9 @@ def define_resnet_flags(resnet_size_choices=None):
 
   flags.DEFINE_enum(
       name='resnet_version', short_name='rv', default='2',
-      enum_values=['1', '2'],
+      enum_values=['1', '2', '3'],
       help=flags_core.help_wrap(
-          'Version of ResNet. (1 or 2) See README.md for details.'))
+          'Version of ResNet. (1 or 2 or 3[data augmentation]) See README.md for details.'))
 
   choice_kwargs = dict(
       name='resnet_size', short_name='rs', default='50',
